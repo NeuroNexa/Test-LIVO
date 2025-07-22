@@ -14,14 +14,14 @@ Omni-LIVO is a multi-camera extension of FAST-LIVO2 with enhanced robustness for
 We sincerely thank the authors of [FAST-LIVO2](https://github.com/hku-mars/FAST-LIVO2) for their outstanding work and for making their code open source. This project would not have been possible without their excellent foundation in LiDAR-Inertial-Visual Odometry. We are grateful for their contribution to the robotics and SLAM community.
 Special thanks to:
 - The FAST-LIVO2 development team at HKU-MARS
-- The entire open-source robotics community for their collaborative spirit
+- The entire open-source robotics community for their collaborataive spirit
 
 ## Overview
 - Multi-camera visual odometry support
 - Enhanced robustness in challenging scenarios
 - Improved tracking performance through multiple viewpoints
 ## Omni-LIVO Dataset
-LINK: https://pan.baidu.com/s/1an5d8usztm1zgqy57lun7w?pwd=74ih
+LINK: https://pan.baidu.com/s/1An5d8USZtM1zgQY57lUn7w?pwd=74ih
 Password: 74ih 
 ### Sensor Configuration
 
