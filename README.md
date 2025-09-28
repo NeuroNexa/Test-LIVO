@@ -87,7 +87,7 @@ Clone the repository and catkin_make:
 
 ```bash
 cd ~/catkin_ws/src
-git clone https://github.com/cyn4676086/omni-livo.git
+git clone https://github.com/HIAS-VPD-LAB/Omni-LIVO/
 cd ../
 catkin_make
 source ~/catkin_ws/devel/setup.bash
