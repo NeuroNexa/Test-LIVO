@@ -119,8 +119,8 @@ extrin_calib:
 ## Run
 
 ```bash
-roslaunch fast-livo2 mid360.launch
-rosbag play xx.bag
+roslaunch fast_livo mapping_mid360.launch
+rosbag play YOUR_DOWNLOADED.bag
 ```
 
 ## Dataset Support
