@@ -1,0 +1,28 @@
+cam_0:
+  cam_model: "Pinhole"
+  cam_width: 1024
+  cam_height: 768
+  scale: 1.0
+  cam_fx: 389.17277882
+  cam_fy: 389.27868175
+  cam_cx: 514.43400152
+  cam_cy: 387.91964096
+  cam_d0: -0.01719321
+  cam_d1: -0.00327091
+  cam_d2: -0.00004432
+  cam_d3: 0.00028875
+cam_1:
+  cam_model: "Pinhole"
+  cam_width: 1024
+  cam_height: 768
+  scale: 1.0
+  cam_fx: 398.65307066
+  cam_fy: 397.93163228
+  cam_cx: 503.83601473
+  cam_cy: 401.55339779
+  cam_d0: -0.00400072
+  cam_d1: -0.01055499
+  cam_d2: 0.00001362
+  cam_d3: -0.00032833
+
+
