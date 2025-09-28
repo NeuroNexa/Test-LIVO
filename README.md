@@ -119,7 +119,8 @@ extrin_calib:
 ## Run
 
 ```bash
-roslaunch omni_livo your_dataset.launch
+roslaunch fast-livo2 mid360.launch
+rosbag play xx.bag
 ```
 
 ## Dataset Support
