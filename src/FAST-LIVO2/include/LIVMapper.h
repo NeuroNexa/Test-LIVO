@@ -64,7 +64,7 @@ public:
 
     void standard_pcl_cbk(const sensor_msgs::PointCloud2::ConstPtr &msg);
 
-    void livox_pcl_cbk(const livox_ros_driver::CustomMsg::ConstPtr &msg_in);
+    void livox_pcl_cbk(const livox_ros_driver2::CustomMsg::ConstPtr &msg_in);
 
     void imu_cbk(const sensor_msgs::Imu::ConstPtr &msg_in);
 

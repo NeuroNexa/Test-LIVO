@@ -14,6 +14,8 @@ set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -pthread -fexceptions")
 # Specific settings for Debug build
 set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -O0 -g")
 
+set(Sophus_LIBRARIES "/usr/local/lib/libSophus.so")
+
 # Detect CPU architecture
 message(STATUS "Current CPU architecture: ${CMAKE_SYSTEM_PROCESSOR}")
 
@@ -85,7 +87,7 @@ find_package(catkin REQUIRED COMPONENTS
   std_msgs
   pcl_ros
   tf
-  livox_ros_driver
+  livox_ros_driver2
   message_generation
   eigen_conversions
   vikit_common
