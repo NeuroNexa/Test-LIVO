@@ -16,14 +16,14 @@ extrin_calib:
   cameras:
 
     - cam_id: 0
-      img_topic: "/cam_front"
+      img_topic: "/fisheye/left/image_raw"
       Rcl: [ -0.720207,  -0.693753,   0.002868,
              -0.012521,   0.008864,  -0.999882,
              0.693646,  -0.720158,  -0.015070]
       Pcl: [  0.090756,  -0.006529,  -0.084491]
 
     - cam_id: 1
-      img_topic: "/cam_left"
+      img_topic: "/fisheye/right/image_raw"
 
       Rcl: [  0.707555,  -0.706598,   0.009238,
               -0.004619,  -0.017697,  -0.999833,
@@ -31,19 +31,19 @@ extrin_calib:
       Pcl: [  0.054002,  -0.007218,  -0.088251]
 
     - cam_id: 2
-      img_topic: "/cam_right"
+      img_topic: "/fisheye/bleft/image_raw"
       Rcl: [ -0.693995,   0.719643,   0.022003,
              -0.032811,  -0.001084,  -0.999461,
              -0.719232,  -0.694343,   0.024365]
       Pcl: [ -0.005720,  -0.078270,  -0.030108]
 
       # When using the handheld dataset, comment out the config related to cam_rare:
-    #- cam_id: 3
-     # img_topic: "/cam_rare"
-     # Rcl: [  0.726027,   0.687592,  -0.010122,
-     #         0.001577,  -0.016384,  -0.999865,
-     #         -0.687665,   0.725912,  -0.012979]
-      #Pcl: [  0.079652,   0.014322,  -0.068272]
+    - cam_id: 3
+      img_topic: "/fisheye/bright/image_raw"
+      Rcl: [  0.726027,   0.687592,  -0.010122,
+              0.001577,  -0.016384,  -0.999865,
+              -0.687665,   0.725912,  -0.012979]
+      Pcl: [  0.079652,   0.014322,  -0.068272]
 
 
 time_offset:
