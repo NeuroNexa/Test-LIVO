@@ -1,4 +1,5 @@
 #include <rclcpp/rclcpp.hpp>
+#include <sensor_msgs/msg/compressed_image.hpp>
 #include <sensor_msgs/msg/image.hpp>
 #include <sensor_msgs/msg/imu.hpp>
 #include <stereo_msgs/msg/disparity_image.hpp>
@@ -6,6 +7,17 @@
 #include <opencv2/highgui/highgui.hpp>
 #include <cv_bridge/cv_bridge.h>
 #include "seeker.hpp"
+#include <fcntl.h>
+#include <sys/mman.h>
+#include <unistd.h>
+#include <cerrno>
+#include <cstdlib>
+#include <cstring>
+
+struct time_stamp {
+  int64_t high;
+  int64_t low;
+};
 
 class SeekRosNode : public rclcpp::Node {
 public:
@@ -26,6 +38,8 @@ public:
     time_sync_ = get_parameter("time_sync").as_bool();
     imu_link_ = get_parameter("imu_link").as_string();
     imu_topic_ = get_parameter("imu_topic").as_string();
+
+    initSharedMemory();
 
     // 初始化image_transport
     // if (use_image_transport_) {
@@ -109,9 +123,66 @@ public:
     seek_.stop_image_stream();
     seek_.stop_depth_stream();
     seek_.close();
+    cleanupSharedMemory();
   }
 
 private:
+  void initSharedMemory() {
+    shared_timestamp_ = nullptr;
+    shared_fd_ = -1;
+    shared_memory_valid_ = false;
+
+    if (!time_sync_) {
+      return;
+    }
+
+    const char *user_name = getlogin();
+    if (user_name == nullptr) {
+      user_name = std::getenv("USER");
+    }
+    if (user_name == nullptr) {
+      RCLCPP_WARN(get_logger(), "Failed to determine current user for shared memory path");
+      return;
+    }
+
+    std::string path_for_time_stamp = std::string("/home/") + user_name + "/timeshare";
+    shared_fd_ = open(path_for_time_stamp.c_str(), O_RDWR);
+    if (shared_fd_ < 0) {
+      RCLCPP_WARN(get_logger(), "Failed to open shared timestamp file %s: %s", path_for_time_stamp.c_str(), strerror(errno));
+      return;
+    }
+
+    void *mapped = mmap(nullptr, sizeof(time_stamp), PROT_READ | PROT_WRITE, MAP_SHARED, shared_fd_, 0);
+    if (mapped == MAP_FAILED) {
+      RCLCPP_WARN(get_logger(), "Failed to map shared timestamp file %s: %s", path_for_time_stamp.c_str(), strerror(errno));
+      close(shared_fd_);
+      shared_fd_ = -1;
+      return;
+    }
+
+    shared_timestamp_ = reinterpret_cast<time_stamp *>(mapped);
+    shared_memory_valid_ = true;
+  }
+
+  void cleanupSharedMemory() {
+    if (shared_memory_valid_ && shared_timestamp_ != nullptr) {
+      munmap(shared_timestamp_, sizeof(time_stamp));
+    }
+    shared_timestamp_ = nullptr;
+    if (shared_fd_ >= 0) {
+      close(shared_fd_);
+      shared_fd_ = -1;
+    }
+    shared_memory_valid_ = false;
+  }
+
+  rclcpp::Time getSyncedStamp(const event_header_t& header) const {
+    if (time_sync_ && shared_memory_valid_ && shared_timestamp_ != nullptr && shared_timestamp_->low > 0) {
+      return rclcpp::Time(static_cast<int64_t>(shared_timestamp_->low));
+    }
+    return rclcpp::Time(header.sec, header.nsec);
+  }
+
   void onDepth(const event_header_t& eheader, const uint8_t* data, int len) {
     const int depth_camera_number = sdev_.dev_info.depth_camera_number;
     const int height = sdev_.dev_info.depth_resolution_height / depth_camera_number;
@@ -124,7 +195,7 @@ private:
 
     // 创建消息头
     auto header = std::make_shared<std_msgs::msg::Header>();
-    header->stamp = rclcpp::Time(eheader.sec, eheader.nsec);
+    header->stamp = getSyncedStamp(eheader);
 
     // 发布视差图像
     for (size_t i = 0; i < depth_camera_number; ++i) {
@@ -167,7 +238,7 @@ private:
   void onEvent(const event_header_t& header, const device_event_t& event) {
     if (event.type == EVENT_TYPE_SENSOR_CUSTOM && pub_imu_) {
       auto imu_msg = std::make_shared<sensor_msgs::msg::Imu>();
-      imu_msg->header.stamp = rclcpp::Time(header.sec, header.nsec);
+      imu_msg->header.stamp = getSyncedStamp(header);
       imu_msg->header.frame_id = imu_link_;
       
       imu_msg->angular_velocity.x = event.event.sensor_custom.angular_velocity_x;
@@ -188,7 +259,7 @@ private:
     const int w = frame.cols;
 
     auto header = std::make_shared<std_msgs::msg::Header>();
-    header->stamp = rclcpp::Time(eheader.sec, eheader.nsec);
+    header->stamp = getSyncedStamp(eheader);
 
     for (int i = 0; i < cam_num; i++) {
       header->frame_id = "cam" + std::to_string(i);
@@ -205,7 +276,7 @@ private:
   void onMjpeg(const event_header_t& pheader, const uint8_t* data, int len) {
     // publish compressed img
     auto compressed = std::make_shared<sensor_msgs::msg::CompressedImage>();
-    compressed->header.stamp = rclcpp::Time(pheader.sec, pheader.nsec);
+    compressed->header.stamp = getSyncedStamp(pheader);
     compressed->format = "jpeg";
     
     compressed->data.resize(len);
@@ -253,6 +324,10 @@ private:
   bool time_sync_;
   std::string imu_link_;
   std::string imu_topic_;
+
+  time_stamp *shared_timestamp_;
+  int shared_fd_;
+  bool shared_memory_valid_;
 };
 
 int main(int argc, char* argv[]) {

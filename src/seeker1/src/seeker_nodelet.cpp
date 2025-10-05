@@ -8,6 +8,17 @@
 #include <cv_bridge/cv_bridge.h>
 #include <opencv2/highgui/highgui.hpp>
 #include <stereo_msgs/DisparityImage.h>
+#include <fcntl.h>
+#include <sys/mman.h>
+#include <unistd.h>
+#include <cerrno>
+#include <cstdlib>
+#include <cstring>
+
+struct time_stamp {
+    int64_t high;
+    int64_t low;
+};
 
 class SeekRosNodeimpl {
 public:
@@ -22,6 +33,8 @@ public:
         private_nh_.param("time_sync", time_sync_, true);
         private_nh_.param("imu_link", imu_link_, std::string("imu_link"));
         private_nh_.param("imu_topic", imu_topic_, std::string("imu_data_raw"));
+
+        initSharedMemory();
 
         // 初始化image_transport
         if (use_image_transport_) {
@@ -106,20 +119,77 @@ public:
         seek.stop_image_stream();
         seek.stop_depth_stream();
         seek.close();
+        cleanupSharedMemory();
     }
 
 private:
+    void initSharedMemory() {
+        shared_timestamp_ = nullptr;
+        shared_fd_ = -1;
+        shared_memory_valid_ = false;
+
+        if (!time_sync_) {
+            return;
+        }
+
+        const char *user_name = getlogin();
+        if (user_name == nullptr) {
+            user_name = std::getenv("USER");
+        }
+        if (user_name == nullptr) {
+            ROS_WARN("Failed to determine current user for shared memory path");
+            return;
+        }
+
+        std::string path_for_time_stamp = std::string("/home/") + user_name + "/timeshare";
+        shared_fd_ = open(path_for_time_stamp.c_str(), O_RDWR);
+        if (shared_fd_ < 0) {
+            ROS_WARN("Failed to open shared timestamp file %s: %s", path_for_time_stamp.c_str(), strerror(errno));
+            return;
+        }
+
+        void *mapped = mmap(nullptr, sizeof(time_stamp), PROT_READ | PROT_WRITE, MAP_SHARED, shared_fd_, 0);
+        if (mapped == MAP_FAILED) {
+            ROS_WARN("Failed to map shared timestamp file %s: %s", path_for_time_stamp.c_str(), strerror(errno));
+            close(shared_fd_);
+            shared_fd_ = -1;
+            return;
+        }
+
+        shared_timestamp_ = reinterpret_cast<time_stamp *>(mapped);
+        shared_memory_valid_ = true;
+    }
+
+    void cleanupSharedMemory() {
+        if (shared_memory_valid_ && shared_timestamp_ != nullptr) {
+            munmap(shared_timestamp_, sizeof(time_stamp));
+        }
+        shared_timestamp_ = nullptr;
+        if (shared_fd_ >= 0) {
+            close(shared_fd_);
+            shared_fd_ = -1;
+        }
+        shared_memory_valid_ = false;
+    }
+
+    ros::Time getSyncedStamp(const event_header_t& header) const {
+        if (time_sync_ && shared_memory_valid_ && shared_timestamp_ != nullptr && shared_timestamp_->low > 0) {
+            return ros::Time::fromNSec(static_cast<uint64_t>(shared_timestamp_->low));
+        }
+        return ros::Time(header.sec, header.nsec);
+    }
+
     void onDepth(event_header_t& pheader, const uint8_t* data, int len) {
         const int depth_camera_number = sdev.dev_info.depth_camera_number;
         const int height = sdev.dev_info.depth_resolution_height/depth_camera_number;
         const int width = sdev.dev_info.depth_resolution_width;
-        
+
         std::vector<cv::Mat> images(depth_camera_number);
         for (int i = 0; i < depth_camera_number; i++) {
             images.at(i) = cv::Mat(height, width, CV_16UC1, (void *)data+i*height*width*2);
         }
         std_msgs::Header header;
-        header.stamp = ros::Time(pheader.sec, pheader.nsec);  // 使用当前时间作为时间戳
+        header.stamp = getSyncedStamp(pheader);
         header.seq = pheader.seq;
         // 发布视差图像
         for (size_t i = 0; i < depth_camera_number; ++i) {
@@ -162,9 +232,9 @@ private:
     void onEvent(event_header_t& header, device_event_t& event) {
         if (event.type == EVENT_TYPE_SENSOR_CUSTOM && pub_imu_) {
             sensor_msgs::Imu imu_msg;
-            imu_msg.header.stamp = ros::Time(header.sec, header.nsec);
+            imu_msg.header.stamp = getSyncedStamp(header);
             imu_msg.header.frame_id = imu_link_;
-            
+
             imu_msg.angular_velocity.x = event.event.sensor_custom.angular_velocity_x;
             imu_msg.angular_velocity.y = event.event.sensor_custom.angular_velocity_y;
             imu_msg.angular_velocity.z = event.event.sensor_custom.angular_velocity_z;
@@ -182,7 +252,7 @@ private:
         const int h = frame.rows / cam_num;
         const int w = frame.cols;
         std_msgs::Header header;
-        header.stamp = ros::Time(eheader.sec, eheader.nsec);
+        header.stamp = getSyncedStamp(eheader);
         header.seq = eheader.seq;
 
         for (int i = 0; i < cam_num; i++) {
@@ -232,6 +302,10 @@ private:
     bool time_sync_;
     std::string imu_link_;
     std::string imu_topic_;
+
+    time_stamp *shared_timestamp_;
+    int shared_fd_;
+    bool shared_memory_valid_;
 };
 
 #include <nodelet/nodelet.h>
