@@ -929,45 +929,45 @@ bool LIVMapper::sync_packages(LidarMeasureGroup &meas)
     switch (slam_mode_) {
         case ONLY_LIO:
         {
-            // 如果是仅使用 LiDAR/IMU 模式
-            if (meas.last_lio_update_time < 0.0)
-                meas.last_lio_update_time = lid_header_time_buffer.front();
-            if (!lidar_pushed) {
-                // 取当前 LiDAR 数据
-                meas.lidar = lid_raw_data_buffer.front();
-                if (meas.lidar->points.size() <= 1)
-                    return false;
+            if (meas.last_lio_update_time < 0.0) meas.last_lio_update_time = lid_header_time_buffer.front();
+            if (!lidar_pushed)
+            {
+                // If not push the lidar into measurement data buffer
+                meas.lidar = lid_raw_data_buffer.front(); // push the first lidar topic
+                if (meas.lidar->points.size() <= 1) return false;
 
-                meas.lidar_frame_beg_time = lid_header_time_buffer.front();
-                meas.lidar_frame_end_time = meas.lidar_frame_beg_time +
-                                            meas.lidar->points.back().curvature / 1000.0;  // 单位：秒
+                meas.lidar_frame_beg_time = lid_header_time_buffer.front();                                                // generate lidar_frame_beg_time
+                meas.lidar_frame_end_time = meas.lidar_frame_beg_time + meas.lidar->points.back().curvature / double(1000); // calc lidar scan end time
                 meas.pcl_proc_cur = meas.lidar;
-                lidar_pushed = true;
+                lidar_pushed = true;                                                                                       // flag
             }
-            // 等待 IMU 数据的时间超过当前 LiDAR 扫描结束时刻
-            if (imu_en && last_timestamp_imu < meas.lidar_frame_end_time)
-                return false;
 
-            MeasureGroup m;
+            if (imu_en && last_timestamp_imu < meas.lidar_frame_end_time)
+            { // waiting imu message needs to be
+                // larger than _lidar_frame_end_time,
+                // make sure complete propagate.
+                return false;
+            }
+
+            struct MeasureGroup m; // standard method to keep imu message.
+
             m.imu.clear();
             m.lio_time = meas.lidar_frame_end_time;
-
             mtx_buffer.lock();
-            while (!imu_buffer.empty()) {
-                if (imu_buffer.front()->header.stamp.toSec() > meas.lidar_frame_end_time)
-                    break;
+            while (!imu_buffer.empty())
+            {
+                if (imu_buffer.front()->header.stamp.toSec() > meas.lidar_frame_end_time) break;
                 m.imu.push_back(imu_buffer.front());
                 imu_buffer.pop_front();
             }
-            // 弹出已使用的 LiDAR 数据
             lid_raw_data_buffer.pop_front();
             lid_header_time_buffer.pop_front();
             mtx_buffer.unlock();
             sig_buffer.notify_all();
 
-            meas.lio_vio_flg = LIO;
+            meas.lio_vio_flg = LIO; // process lidar topic, so timestamp should be lidar scan end.
             meas.measures.push_back(m);
-            lidar_pushed = false;  // 重置标记，等待下一帧 LiDAR
+            lidar_pushed = false; // sync one whole lidar scan.
             return true;
         }
 
@@ -979,67 +979,118 @@ bool LIVMapper::sync_packages(LidarMeasureGroup &meas)
                 case WAIT:
                 case VIO:
                 {
-                    // 以相机 0 为参考，计算采集时间（假定 exposure_time_init 对所有相机一致）
-                    double ref_img_capture_time = img_time_buffers[0].front() + exposure_time_init;
-                    const double tolerance = 0.001;  // 允许误差 1 毫秒
+                    // 验证多相机时间戳一致性（硬件同步）
+                    const double time_tolerance = 0.001; // 允许1毫秒误差
+                    double ref_timestamp = img_time_buffers[0].front();
+                    bool timestamps_consistent = true;
 
+                    // 检查所有相机时间戳是否一致
+                    for (int i = 1; i < num_of_cameras; i++) {
+                        double time_diff = std::abs(img_time_buffers[i].front() - ref_timestamp);
+                        if (time_diff > time_tolerance) {
+                            timestamps_consistent = false;
+                            ROS_WARN("Camera timestamps inconsistent: cam0=%.6f, cam%d=%.6f, diff=%.6f ms",
+                                     ref_timestamp, i, img_time_buffers[i].front(), time_diff * 1000.0);
+                            break;
+                        }
+                    }
 
-                    double img_capture_time = ref_img_capture_time;
+                    // 如果时间戳不一致，丢弃所有相机中时间最早的一帧
+                    if (!timestamps_consistent) {
+                        mtx_buffer.lock();
 
-                    // 如果新图像时间低于上一次同步时间（或几乎相等），则认为数据不新，丢弃所有相机当前帧
+                        // 找出时间最早的相机
+                        int earliest_cam = 0;
+                        for (int i = 1; i < num_of_cameras; i++) {
+                            if (img_time_buffers[i].front() < img_time_buffers[earliest_cam].front()) {
+                                earliest_cam = i;
+                            }
+                        }
+
+                        // 只丢弃时间最早的那个相机的一帧
+                        img_buffers[earliest_cam].pop_front();
+                        img_time_buffers[earliest_cam].pop_front();
+
+                        mtx_buffer.unlock();
+                        sig_buffer.notify_all();
+                        return false;
+                    }
+
+                    // 初始化last_lio_update_time
+                    if (meas.last_lio_update_time < 0.0)
+                        meas.last_lio_update_time = lid_header_time_buffer.front();
+
+                    // 计算以相机曝光中点为参考的同步时间
+                    double img_capture_time = ref_timestamp + exposure_time_init;
+
+                    // 获取最新的LiDAR和IMU时间，用于判断数据充足性
+                    double lid_newest_time = lid_header_time_buffer.back() +
+                                             lid_raw_data_buffer.back()->points.back().curvature / 1000.0;
+                    double imu_newest_time = imu_en ? imu_buffer.back()->header.stamp.toSec() : img_capture_time + 1.0;
+
+                    // 如果新图像时间低于上一次同步时间，则认为数据不新，丢弃所有相机当前帧
                     if (img_capture_time < meas.last_lio_update_time + 0.00001) {
+                        mtx_buffer.lock();
                         for (int i = 0; i < num_of_cameras; i++) {
                             img_buffers[i].pop_front();
                             img_time_buffers[i].pop_front();
                         }
-                        ROS_ERROR("[ Data Cut ] Throw one image frame! ");
+                        mtx_buffer.unlock();
+                        sig_buffer.notify_all();
+
                         return false;
                     }
 
-                    // 检查 LiDAR 与 IMU 最新时间是否满足要求
-                    double lid_newest_time = lid_header_time_buffer.back() +
-                                             lid_raw_data_buffer.back()->points.back().curvature / 1000.0;
-                    double imu_newest_time = imu_buffer.back()->header.stamp.toSec();
-                    if (img_capture_time > lid_newest_time || img_capture_time > imu_newest_time)
+                    // 检查数据充足性：如果图像时间超出了最新LiDAR或IMU时间，等待更多数据
+                    if (img_capture_time > lid_newest_time || img_capture_time > imu_newest_time) {
                         return false;
+                    }
 
                     MeasureGroup m;
                     m.imu.clear();
                     m.lio_time = img_capture_time;
 
-                    mtx_buffer.lock();
-                    while (!imu_buffer.empty()) {
-                        double imu_time = imu_buffer.front()->header.stamp.toSec();
-                        if (imu_time > m.lio_time)
-                            break;
-                        if (imu_time > meas.last_lio_update_time)
-                            m.imu.push_back(imu_buffer.front());
-                        imu_buffer.pop_front();
+                    // 收集IMU数据
+                    if (imu_en) {
+                        mtx_buffer.lock();
+                        while (!imu_buffer.empty()) {
+                            double imu_time = imu_buffer.front()->header.stamp.toSec();
+                            if (imu_time > m.lio_time)
+                                break;
+                            if (imu_time > meas.last_lio_update_time)
+                                m.imu.push_back(imu_buffer.front());
+                            imu_buffer.pop_front();
+                        }
+                        mtx_buffer.unlock();
                     }
-                    mtx_buffer.unlock();
-                    sig_buffer.notify_all();
 
-                    // 处理 LiDAR 数据
+                    // 处理 LiDAR 数据：参考单相机版本的点云分割策略
                     *(meas.pcl_proc_cur) = *(meas.pcl_proc_next);
                     PointCloudXYZI().swap(*meas.pcl_proc_next);
+
                     int lid_frame_num = lid_raw_data_buffer.size();
                     int max_size = meas.pcl_proc_cur->size() + 24000 * lid_frame_num;
                     meas.pcl_proc_cur->reserve(max_size);
                     meas.pcl_proc_next->reserve(max_size);
 
+                    // 分割点云：将点云按时间分为当前帧和下一帧
                     while (!lid_raw_data_buffer.empty()) {
                         if (lid_header_time_buffer.front() > img_capture_time)
                             break;
+
                         auto pcl = lid_raw_data_buffer.front()->points;
                         double frame_header_time = lid_header_time_buffer.front();
                         float max_offs_time_ms = (m.lio_time - frame_header_time) * 1000.0f;
+
                         for (size_t i = 0; i < pcl.size(); i++) {
                             auto pt = pcl[i];
                             if (pcl[i].curvature < max_offs_time_ms) {
+                                // 属于当前帧的点
                                 pt.curvature += (frame_header_time - meas.last_lio_update_time) * 1000.0f;
                                 meas.pcl_proc_cur->points.push_back(pt);
                             }
                             else {
+                                // 属于下一帧的点
                                 pt.curvature += (frame_header_time - m.lio_time) * 1000.0f;
                                 meas.pcl_proc_next->points.push_back(pt);
                             }
@@ -1048,48 +1099,85 @@ bool LIVMapper::sync_packages(LidarMeasureGroup &meas)
                         lid_header_time_buffer.pop_front();
                     }
 
-                    // 将所有相机当前帧图像存入 MeasureGroup（不在此处消费，留待 VIO 更新时消费）
+                    // 将所有相机当前帧图像存入 MeasureGroup
                     m.imgs.resize(num_of_cameras);
                     for (int i = 0; i < num_of_cameras; i++) {
                         m.imgs[i] = img_buffers[i].front();
                     }
 
+                    ROS_INFO("[ LIVO ] Synced LIO: img_time=%.6f, pcl_cur=%zu, pcl_next=%zu",
+                             img_capture_time, meas.pcl_proc_cur->size(), meas.pcl_proc_next->size());
+
                     meas.measures.push_back(m);
                     meas.lio_vio_flg = LIO;
                     lidar_pushed = false;
+                    sig_buffer.notify_all();
                     return true;
                 }
 
                     // 在 LIO 状态下，执行 VIO 更新，消费掉各相机当前帧图像
                 case LIO:
                 {
-                    double ref_img_capture_time = img_time_buffers[0].front() + exposure_time_init;
-                    const double tolerance = 0.001;
+                    // 验证多相机时间戳一致性
+                    const double time_tolerance = 0.001; // 允许1毫秒误差
+                    double ref_timestamp = img_time_buffers[0].front();
+                    bool timestamps_consistent = true;
 
-                    double img_capture_time = ref_img_capture_time;
+                    // 检查所有相机时间戳是否一致
+                    for (int i = 1; i < num_of_cameras; i++) {
+                        double time_diff = std::abs(img_time_buffers[i].front() - ref_timestamp);
+                        if (time_diff > time_tolerance) {
+                            timestamps_consistent = false;
+                            ROS_WARN("VIO stage: Camera timestamps inconsistent: cam0=%.6f, cam%d=%.6f, diff=%.6f ms",
+                                     ref_timestamp, i, img_time_buffers[i].front(), time_diff * 1000.0);
+                            break;
+                        }
+                    }
+
+                    // 如果时间戳不一致，丢弃所有相机中时间最早的一帧
+                    if (!timestamps_consistent) {
+                        // 找出时间最早的相机
+                        int earliest_cam = 0;
+                        for (int i = 1; i < num_of_cameras; i++) {
+                            if (img_time_buffers[i].front() < img_time_buffers[earliest_cam].front()) {
+                                earliest_cam = i;
+                            }
+                        }
+
+                        // 只丢弃时间最早的那个相机的一帧
+                        ROS_WARN("VIO stage: Dropping earliest frame from camera %d (t=%.6f)",
+                                 earliest_cam, img_time_buffers[earliest_cam].front());
+                        img_buffers[earliest_cam].pop_front();
+                        img_time_buffers[earliest_cam].pop_front();
+
+                        sig_buffer.notify_all();
+                        return false;
+                    }
+
+                    double img_capture_time = ref_timestamp + exposure_time_init;
                     meas.lio_vio_flg = VIO;
-                    // 若进入 VIO 更新则清除之前的 MeasureGroup（具体逻辑视需求而定）
+
+                    // 若进入 VIO 更新则清除之前的 MeasureGroup
                     meas.measures.clear();
 
                     MeasureGroup m;
                     m.imgs.resize(num_of_cameras);
-                    m.vio_time = img_capture_time;
-                    m.lio_time = meas.last_lio_update_time;
-                    for (int i = 0; i < num_of_cameras; i++) {
-                        m.imgs[i] = img_buffers[i].front();
-                    }
+                    m.vio_time = img_capture_time;  // VIO时间为图像时间
+                    m.lio_time = meas.last_lio_update_time;  // LIO时间为上次LIO更新时间
 
                     mtx_buffer.lock();
-                    // 消费各相机已使用的图像数据
                     for (int i = 0; i < num_of_cameras; i++) {
+                        m.imgs[i] = img_buffers[i].front();
                         img_buffers[i].pop_front();
                         img_time_buffers[i].pop_front();
                     }
                     mtx_buffer.unlock();
-                    sig_buffer.notify_all();
+
+                    ROS_INFO("[ LIVO ] VIO processing: img_time=%.6f", img_capture_time);
 
                     meas.measures.push_back(m);
                     lidar_pushed = false;
+                    sig_buffer.notify_all();
                     return true;
                 }
 

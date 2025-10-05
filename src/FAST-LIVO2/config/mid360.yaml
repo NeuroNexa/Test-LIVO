@@ -95,20 +95,6 @@ lio:
   layer_init_num: [5, 5, 5, 5, 5]
 
 
-loop_closure:
-  enabled: true
-  bev_resolution: 0.5
-  bev_size: 400
-  keyframe_interval: 2000 #关键帧之间间隔的帧数
-  similarity_threshold: 0.85
-  min_frames_between_loops: 300
-  pose_graph_iterations: 10
-  check_area_radius: 5.0
-  frames_cooldown_after_loop: 500
-  projection_axis: z
-  accumulate_frames: 5
-  GICPMaxCorrespondenceDistance: 3.0
-
 
 
 local_map:
@@ -116,19 +102,13 @@ local_map:
   half_map_size: 100
   sliding_thresh: 8
 
-height_filter:
-  enabled: true
-  min_height: 0
-  max_height: 0.5
-  apply_to_rgb: true
-
 uav:
   imu_rate_odom: false
   gravity_align_en: false
 
 publish:
   dense_map_en: false
-  pub_effect_point_en: true
+  pub_effect_point_en: false
   pub_plane_en: false
   pub_scan_num: 1
   blind_rgb_points: 0.0
@@ -138,7 +118,7 @@ evo:
   pose_output_en: false
 
 pcd_save:
-  pcd_save_en: true
+  pcd_save_en: false
   ply_save_en: false  #for loop closure point cloud recontruct , must open loopclosure
   colmap_output_en: false
   filter_size_pcd: 0.2
