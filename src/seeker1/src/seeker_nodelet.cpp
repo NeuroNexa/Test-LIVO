@@ -167,7 +167,9 @@ private:
 
     ros::Time getSyncedStamp(const event_header_t& header) const {
         if (time_sync_ && shared_memory_valid_ && shared_timestamp_ != nullptr && shared_timestamp_->low > 0) {
-            return ros::Time::fromNSec(static_cast<uint64_t>(shared_timestamp_->low));
+            ros::Time t; 
+            t.fromNSec(static_cast<uint64_t>(shared_timestamp_->low)); 
+            return t;
         }
         return ros::Time(header.sec, header.nsec);
     }
