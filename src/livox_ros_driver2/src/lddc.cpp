@@ -32,6 +32,7 @@
 #include <math.h>
 #include <stdint.h>
 #include <unistd.h>
+#include <cstdlib>
 
 #include "include/ros_headers.h"
 
@@ -196,9 +197,10 @@ namespace livox_ros
     //******************************************************************** add code
     if (isOpended == false)
     {
-      const char *user_name = getlogin();
-      std::string path_for_time_stamp = "/home/" + std::string(user_name) + "/timeshare";
-
+      const char *home_dir = std::getenv("HOME");
+      std::string base_path = (home_dir && home_dir[0] != '\0') ? std::string(home_dir) : std::string("/tmp");
+      std::string path_for_time_stamp = base_path + "/timeshare";
+      
       const char *shared_file_name = path_for_time_stamp.c_str();
       int fd = open(shared_file_name, O_CREAT | O_RDWR | O_TRUNC, 0666);
       if (fd == -1)

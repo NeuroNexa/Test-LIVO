@@ -136,16 +136,9 @@ private:
       return;
     }
 
-    const char *user_name = getlogin();
-    if (user_name == nullptr) {
-      user_name = std::getenv("USER");
-    }
-    if (user_name == nullptr) {
-      RCLCPP_WARN(get_logger(), "Failed to determine current user for shared memory path");
-      return;
-    }
-
-    std::string path_for_time_stamp = std::string("/home/") + user_name + "/timeshare";
+    const char *home_dir = std::getenv("HOME");
+    std::string base_path = (home_dir && home_dir[0] != '\0') ? std::string(home_dir) : std::string("/tmp");
+    std::string path_for_time_stamp = base_path + "/timeshare";
     shared_fd_ = open(path_for_time_stamp.c_str(), O_RDWR);
     if (shared_fd_ < 0) {
       RCLCPP_WARN(get_logger(), "Failed to open shared timestamp file %s: %s", path_for_time_stamp.c_str(), strerror(errno));
