@@ -66,20 +66,6 @@ lio:
   max_points_num: 50
   layer_init_num: [5, 5, 5, 5, 5]
 
-loop_closure:
-  enabled: true
-  bev_resolution: 0.1
-  bev_size: 200
-  keyframe_interval: 5
-  similarity_threshold: 0.85
-  visual_similarity_threshold: 0.8
-  min_frames_between_loops: 300  #keyframe nums between
-  pose_graph_iterations: 10
-  check_area_radius: 10.0
-  projection_axis: x
-  accumulate_frames: 10
-  frames_cooldown_after_loop: 50
-  GICPMaxCorrespondenceDistance: 0.5
 
 local_map:
   map_sliding_en: falses
