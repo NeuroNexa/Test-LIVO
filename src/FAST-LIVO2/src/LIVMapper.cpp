@@ -689,26 +689,35 @@ void LIVMapper::imu_prop_callback(const ros::TimerEvent &e) {
                 prop_imu_buffer.pop_front();
             }
             last_t_from_lidar_end_time = 0;
-            for (int i = 0; i < prop_imu_buffer.size(); i++) {
-                double t_from_lidar_end_time = prop_imu_buffer[i].header.stamp.toSec() - latest_ekf_time;
+            while (!prop_imu_buffer.empty()) {
+                const sensor_msgs::Imu &imu_msg = prop_imu_buffer.front();
+                double t_from_lidar_end_time = imu_msg.header.stamp.toSec() - latest_ekf_time;
                 double dt = t_from_lidar_end_time - last_t_from_lidar_end_time;
-                // cout << "prop dt" << dt << ", " << t_from_lidar_end_time << ", " << last_t_from_lidar_end_time << endl;
-                V3D acc_imu(prop_imu_buffer[i].linear_acceleration.x, prop_imu_buffer[i].linear_acceleration.y,
-                            prop_imu_buffer[i].linear_acceleration.z);
-                V3D omg_imu(prop_imu_buffer[i].angular_velocity.x, prop_imu_buffer[i].angular_velocity.y,
-                            prop_imu_buffer[i].angular_velocity.z);
+                V3D acc_imu(imu_msg.linear_acceleration.x, imu_msg.linear_acceleration.y,
+                            imu_msg.linear_acceleration.z);
+                V3D omg_imu(imu_msg.angular_velocity.x, imu_msg.angular_velocity.y, imu_msg.angular_velocity.z);
                 prop_imu_once(imu_propagate, dt, acc_imu, omg_imu);
                 last_t_from_lidar_end_time = t_from_lidar_end_time;
+                prop_imu_buffer.pop_front();
             }
             state_update_flg = false;
         } else {
-            V3D acc_imu(newest_imu.linear_acceleration.x, newest_imu.linear_acceleration.y,
-                        newest_imu.linear_acceleration.z);
-            V3D omg_imu(newest_imu.angular_velocity.x, newest_imu.angular_velocity.y, newest_imu.angular_velocity.z);
-            double t_from_lidar_end_time = newest_imu.header.stamp.toSec() - latest_ekf_time;
+            // 保留最新的 IMU 数据，避免缓存无限增长
+            while (prop_imu_buffer.size() > 1) {
+                prop_imu_buffer.pop_front();
+            }
+
+            const sensor_msgs::Imu &imu_msg = prop_imu_buffer.empty() ? newest_imu : prop_imu_buffer.back();
+            V3D acc_imu(imu_msg.linear_acceleration.x, imu_msg.linear_acceleration.y, imu_msg.linear_acceleration.z);
+            V3D omg_imu(imu_msg.angular_velocity.x, imu_msg.angular_velocity.y, imu_msg.angular_velocity.z);
+            double t_from_lidar_end_time = imu_msg.header.stamp.toSec() - latest_ekf_time;
             double dt = t_from_lidar_end_time - last_t_from_lidar_end_time;
             prop_imu_once(imu_propagate, dt, acc_imu, omg_imu);
             last_t_from_lidar_end_time = t_from_lidar_end_time;
+
+            if (!prop_imu_buffer.empty()) {
+                prop_imu_buffer.clear();
+            }
         }
 
         V3D posi, vel_i;
@@ -1123,11 +1132,15 @@ bool LIVMapper::sync_packages(LidarMeasureGroup &meas)
                         lid_header_time_buffer.pop_front();
                     }
 
-                    // 将所有相机当前帧图像存入 MeasureGroup
+                    // 将所有相机当前帧图像存入 MeasureGroup，并弹出缓存中已消费的数据
                     m.imgs.resize(num_of_cameras);
+                    mtx_buffer.lock();
                     for (int i = 0; i < num_of_cameras; i++) {
                         m.imgs[i] = img_buffers[i].front();
+                        img_buffers[i].pop_front();
+                        img_time_buffers[i].pop_front();
                     }
+                    mtx_buffer.unlock();
 
                     ROS_INFO("[ LIVO ] Synced LIO: img_time=%.6f, pcl_cur=%zu, pcl_next=%zu",
                              img_capture_time, meas.pcl_proc_cur->size(), meas.pcl_proc_next->size());
