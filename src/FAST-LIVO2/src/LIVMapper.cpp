@@ -377,6 +377,7 @@ void LIVMapper::handleVIO() {
     // 检查是否有足够的点云数据
     if (pcl_w_wait_pub->empty() || (pcl_w_wait_pub == nullptr)) {
         std::cout << "[ VIO ] No point!!!" << std::endl;
+        releaseProcessedMeasurements();
         return;
     }
 
@@ -395,6 +396,7 @@ void LIVMapper::handleVIO() {
     std::vector<cv::Mat> imgs = LidarMeasures.measures.back().imgs;
     if (imgs.empty()) {
         ROS_WARN("[ VIO ] No images available in the measurement group; skipping VIO update.");
+        releaseProcessedMeasurements();
         return;
     }
     ROS_INFO("[ VIO ] Processing frame with %zu image(s).", imgs.size());
@@ -424,6 +426,8 @@ void LIVMapper::handleVIO() {
              << _state.bias_a.transpose() << " "
              << V3D(_state.inv_expo_time, 0, 0).transpose() << " "
              << feats_undistort->points.size() << std::endl;
+
+    releaseProcessedMeasurements();
 }
 
 void LIVMapper::handleLIO() {
@@ -436,6 +440,7 @@ void LIVMapper::handleLIO() {
 
     if (feats_undistort->empty() || (feats_undistort == nullptr)) {
         std::cout << "[ LIO ]: No point!!!" << std::endl;
+        releaseProcessedMeasurements();
         return;
     }
 
@@ -571,6 +576,25 @@ void LIVMapper::handleLIO() {
              << " "
              << _state.bias_a.transpose() << " " << V3D(_state.inv_expo_time, 0, 0).transpose() << " "
              << feats_undistort->points.size() << std::endl;
+
+    releaseProcessedMeasurements();
+}
+
+void LIVMapper::releaseProcessedMeasurements() {
+    if (LidarMeasures.measures.empty()) {
+        return;
+    }
+
+    for (auto &group : LidarMeasures.measures) {
+        group.imu.clear();
+        for (auto &img : group.imgs) {
+            img.release();
+        }
+        group.imgs.clear();
+    }
+
+    std::deque<MeasureGroup> empty;
+    LidarMeasures.measures.swap(empty);
 }
 
 void LIVMapper::savePCD() {

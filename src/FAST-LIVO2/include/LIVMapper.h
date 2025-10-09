@@ -45,6 +45,8 @@ public:
 
     void handleLIO();
 
+    void releaseProcessedMeasurements();
+
     void savePCD();
 
     void processImu();
