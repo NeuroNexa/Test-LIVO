@@ -142,6 +142,8 @@ public:
 
     ~VIOManager();
 
+    void clearWarpMap();
+
     void updateStateInverse(const std::vector<cv::Mat> &imgs, int level);
 
     void updateState(const std::vector<cv::Mat> &imgs, int level);

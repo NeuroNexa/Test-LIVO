@@ -22,13 +22,14 @@ UserInputThread::UserInputThread() :
   new_terminal_settings_.c_cc[VMIN] = 1; //minimum of number input read.
   tcsetattr(0, TCSANOW, &new_terminal_settings_); // use these new terminal i/o settings now
 
-  user_input_thread_ = new std::thread(&UserInputThread::acquireUserInput, this);
+  user_input_thread_ = std::thread(&UserInputThread::acquireUserInput, this);
 }
 
 UserInputThread::~UserInputThread()
 {
   tcsetattr(0, TCSANOW, &original_terminal_settings_);
-  user_input_thread_->join();
+  if (user_input_thread_.joinable())
+    user_input_thread_.join();
   printf("UserInputThread destructed.\n");
 }
 

@@ -7,10 +7,17 @@ VIOManager::VIOManager() {
 
 VIOManager::~VIOManager() {
     delete visual_submap;
-    for (auto &pair: warp_map) delete pair.second;
-    warp_map.clear();
+    clearWarpMap();
     for (auto &pair: feat_map) delete pair.second;
     feat_map.clear();
+}
+
+void VIOManager::clearWarpMap() {
+    for (auto &pair: warp_map) {
+        delete pair.second;
+        pair.second = nullptr;
+    }
+    warp_map.clear();
 }
 
 void VIOManager::setImuToLidarExtrinsic(const V3D &transl, const M3D &rot) {
@@ -335,7 +342,7 @@ void VIOManager::retrieveFromVisualSparseMap(const std::vector<cv::Mat> imgs,
 
     // 如果 normal_en 为 false，则清空 warp_map
     if (!normal_en)
-        warp_map.clear();
+        clearWarpMap();
 
     // 为每台相机分配一张深度图（假设各相机分辨率相同）
     std::vector<cv::Mat> depth_imgs(cams.size());

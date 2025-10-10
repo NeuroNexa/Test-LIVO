@@ -42,7 +42,7 @@ private:
   int getche();
 
   bool stop_;
-  std::thread * user_input_thread_;
+  std::thread user_input_thread_;
   char input_;
 
   struct termios original_terminal_settings_;
