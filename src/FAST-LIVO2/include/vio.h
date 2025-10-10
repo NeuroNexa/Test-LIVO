@@ -126,7 +126,7 @@ public:
     ofstream fout_camera, fout_colmap;
     unordered_map<VOXEL_LOCATION, VOXEL_POINTS *> feat_map;
     unordered_map<VOXEL_LOCATION, int> sub_feat_map;
-    unordered_map<int, Warp> warp_map;
+    unordered_map<int, Warp *> warp_map;
     vector<VisualPoint *> retrieve_voxel_points;
     vector<pointWithVar> append_voxel_points;
     FramePtr new_frame_;
@@ -200,6 +200,10 @@ public:
 
     double calculateNCC(float *ref_patch, float *cur_patch, int patch_size);
 
+private:
+    void clearWarpMap();
+
+public:
     int getBestSearchLevel(const Matrix2d &A_cur_ref, const int max_level);
 
     V3F getInterpolatedPixel(cv::Mat img, V2D pc);
