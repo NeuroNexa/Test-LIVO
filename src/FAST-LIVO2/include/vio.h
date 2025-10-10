@@ -6,6 +6,7 @@
 #include <opencv2/imgproc/imgproc_c.h>
 #include <pcl/filters/voxel_grid.h>
 #include <set>
+#include <unordered_map>
 #include <vikit/math_utils.h>
 #include <vikit/robust_cost.h>
 #include <vikit/vision.h>
@@ -43,6 +44,7 @@ struct SubSparseMap {
 
 class Warp {
 public:
+    Warp() = default;
     Matrix2d A_cur_ref;
     int search_level;
 
@@ -124,7 +126,7 @@ public:
     ofstream fout_camera, fout_colmap;
     unordered_map<VOXEL_LOCATION, VOXEL_POINTS *> feat_map;
     unordered_map<VOXEL_LOCATION, int> sub_feat_map;
-    unordered_map<int, Warp *> warp_map;
+    unordered_map<int, Warp> warp_map;
     vector<VisualPoint *> retrieve_voxel_points;
     vector<pointWithVar> append_voxel_points;
     FramePtr new_frame_;
@@ -141,8 +143,6 @@ public:
     VIOManager();
 
     ~VIOManager();
-
-    void clearWarpMap();
 
     void updateStateInverse(const std::vector<cv::Mat> &imgs, int level);
 

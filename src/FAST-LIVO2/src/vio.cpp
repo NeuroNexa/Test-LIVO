@@ -7,17 +7,9 @@ VIOManager::VIOManager() {
 
 VIOManager::~VIOManager() {
     delete visual_submap;
-    clearWarpMap();
+    warp_map.clear();
     for (auto &pair: feat_map) delete pair.second;
     feat_map.clear();
-}
-
-void VIOManager::clearWarpMap() {
-    for (auto &pair: warp_map) {
-        delete pair.second;
-        pair.second = nullptr;
-    }
-    warp_map.clear();
 }
 
 void VIOManager::setImuToLidarExtrinsic(const V3D &transl, const M3D &rot) {
@@ -342,7 +334,7 @@ void VIOManager::retrieveFromVisualSparseMap(const std::vector<cv::Mat> imgs,
 
     // 如果 normal_en 为 false，则清空 warp_map
     if (!normal_en)
-        clearWarpMap();
+        warp_map.clear();
 
     // 为每台相机分配一张深度图（假设各相机分辨率相同）
     std::vector<cv::Mat> depth_imgs(cams.size());
@@ -618,8 +610,8 @@ void VIOManager::retrieveFromVisualSparseMap(const std::vector<cv::Mat> imgs,
                 auto iter_warp = warp_map.find(ref_ftr->id_);
                 if (iter_warp != warp_map.end())
                 {
-                    search_level = iter_warp->second->search_level;
-                    A_cur_ref_zero = iter_warp->second->A_cur_ref;
+                    search_level = iter_warp->second.search_level;
+                    A_cur_ref_zero = iter_warp->second.A_cur_ref;
                 }
                 else
                 {
@@ -628,8 +620,7 @@ void VIOManager::retrieveFromVisualSparseMap(const std::vector<cv::Mat> imgs,
                                         new_frame_->T_f_w_[cam_idx] * ref_ftr->T_f_w_.inverse(),
                                         ref_ftr->level_, 0, patch_size_half, A_cur_ref_zero);
                     search_level = getBestSearchLevel(A_cur_ref_zero, 2);
-                    Warp *ot = new Warp(search_level, A_cur_ref_zero);
-                    warp_map[ref_ftr->id_] = ot;
+                    warp_map.emplace(ref_ftr->id_, Warp(search_level, A_cur_ref_zero));
                 }
             }
 

@@ -13,6 +13,7 @@ namespace vk {
 
 UserInputThread::UserInputThread() :
     stop_(false),
+    user_input_thread_(nullptr),
     input_( (char) 0)
 {
   tcgetattr(0, &original_terminal_settings_); // save old terminal i/o settings
@@ -22,14 +23,19 @@ UserInputThread::UserInputThread() :
   new_terminal_settings_.c_cc[VMIN] = 1; //minimum of number input read.
   tcsetattr(0, TCSANOW, &new_terminal_settings_); // use these new terminal i/o settings now
 
-  user_input_thread_ = std::thread(&UserInputThread::acquireUserInput, this);
+  user_input_thread_ = new std::thread(&UserInputThread::acquireUserInput, this);
 }
 
 UserInputThread::~UserInputThread()
 {
   tcsetattr(0, TCSANOW, &original_terminal_settings_);
-  if (user_input_thread_.joinable())
-    user_input_thread_.join();
+  if (user_input_thread_)
+  {
+    if (user_input_thread_->joinable())
+      user_input_thread_->join();
+    delete user_input_thread_;
+    user_input_thread_ = nullptr;
+  }
   printf("UserInputThread destructed.\n");
 }
 
