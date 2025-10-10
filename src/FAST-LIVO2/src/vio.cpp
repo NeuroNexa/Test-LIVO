@@ -628,7 +628,9 @@ void VIOManager::retrieveFromVisualSparseMap(const std::vector<cv::Mat> imgs,
                                         new_frame_->T_f_w_[cam_idx] * ref_ftr->T_f_w_.inverse(),
                                         ref_ftr->level_, 0, patch_size_half, A_cur_ref_zero);
                     search_level = getBestSearchLevel(A_cur_ref_zero, 2);
-                    warp_map[ref_ftr->id_] = new Warp(search_level, A_cur_ref_zero);
+                    Warp *&cached_entry = warp_map[ref_ftr->id_];
+                    delete cached_entry;
+                    cached_entry = new Warp(search_level, A_cur_ref_zero);
                 }
             }
 

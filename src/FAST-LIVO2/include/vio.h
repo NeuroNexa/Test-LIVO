@@ -205,6 +205,7 @@ private:
 
     int getBestSearchLevel(const Matrix2d &A_cur_ref, const int max_level);
 
+public:
     V3F getInterpolatedPixel(cv::Mat img, V2D pc);
 
 };
