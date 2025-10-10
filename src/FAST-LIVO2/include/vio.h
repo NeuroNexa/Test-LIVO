@@ -6,7 +6,6 @@
 #include <opencv2/imgproc/imgproc_c.h>
 #include <pcl/filters/voxel_grid.h>
 #include <set>
-#include <memory>
 #include <unordered_map>
 #include <vikit/math_utils.h>
 #include <vikit/robust_cost.h>
@@ -127,7 +126,7 @@ public:
     ofstream fout_camera, fout_colmap;
     unordered_map<VOXEL_LOCATION, VOXEL_POINTS *> feat_map;
     unordered_map<VOXEL_LOCATION, int> sub_feat_map;
-    unordered_map<int, std::unique_ptr<Warp>> warp_map;
+    unordered_map<int, Warp *> warp_map;
     vector<VisualPoint *> retrieve_voxel_points;
     vector<pointWithVar> append_voxel_points;
     FramePtr new_frame_;
@@ -198,6 +197,9 @@ public:
     void precomputeReferencePatches(int level);
 
     void dumpDataForColmap();
+
+private:
+    void clearWarpMap();
 
     double calculateNCC(float *ref_patch, float *cur_patch, int patch_size);
 
