@@ -1,0 +1,16 @@
+cam_0:
+  cam_model: "OmniRadtan"
+  distortion_model: "radtan"
+  cam_width: 1280
+  cam_height: 1088
+  scale: 1.0
+  cam_xi: 3.2266406781190398
+  cam_fx: 1671.7466720545565
+  cam_fy: 1671.2354693430948
+  cam_cx: 538.4818116927695
+  cam_cy: 633.7553663949875
+  cam_d0: -0.02263059039691893
+  cam_d1: 0.22874964132503364
+  cam_d2: -0.0026465580411478185
+  cam_d3: 0.004848690413283687
+  cam_d4: 0.0

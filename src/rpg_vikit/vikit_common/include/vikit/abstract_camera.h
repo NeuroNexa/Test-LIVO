@@ -8,6 +8,7 @@
 #ifndef ABSTRACT_CAMERA_H_
 #define ABSTRACT_CAMERA_H_
 
+#include <cmath>
 #include <Eigen/Core>
 
 namespace vk
@@ -56,6 +57,32 @@ public:
   virtual double fy() const = 0;
   virtual double cx() const = 0;
   virtual double cy() const = 0;
+
+  virtual void projectionJacobian(const Vector3d& xyz_c, Eigen::Matrix<double, 2, 3>& J) const
+  {
+    const double fx_i = fx();
+    const double fy_i = fy();
+
+    const double x = xyz_c[0];
+    const double y = xyz_c[1];
+    const double z = xyz_c[2];
+    if(std::fabs(z) < 1e-12)
+    {
+      J.setZero();
+      return;
+    }
+
+    const double z_inv = 1.0 / z;
+    const double z_inv2 = z_inv * z_inv;
+
+    J(0, 0) = fx_i * z_inv;
+    J(0, 1) = 0.0;
+    J(0, 2) = -fx_i * x * z_inv2;
+
+    J(1, 0) = 0.0;
+    J(1, 1) = fy_i * z_inv;
+    J(1, 2) = -fy_i * y * z_inv2;
+  }
 
   inline int width() const { return width_; }
 

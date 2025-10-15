@@ -13,6 +13,7 @@
 #include <vikit/pinhole_camera.h>
 #include <vikit/atan_camera.h>
 #include <vikit/omni_camera.h>
+#include <vikit/omni_radtan_camera.h>
 #include <vikit/equidistant_camera.h>
 #include <vikit/polynomial_camera.h>
 #include <vikit/params_helper.h>
@@ -25,9 +26,27 @@ bool loadFromRosNs(const std::string& ns, vk::AbstractCamera*& cam)
 {
   bool res = true;
   std::string cam_model(getParam<std::string>(ns+"/cam_model"));
+  std::string distortion_model(getParam<std::string>(ns+"/distortion_model", ""));
   if(cam_model == "Ocam")
   {
     cam = new vk::OmniCamera(getParam<std::string>(ns+"/cam_calib_file", ""));
+  }
+  else if(cam_model == "OmniRadtan" || (cam_model == "omni" && distortion_model == "radtan"))
+  {
+    cam = new vk::OmniRadtanCamera(
+        getParam<int>(ns+"/cam_width"),
+        getParam<int>(ns+"/cam_height"),
+        getParam<double>(ns+"/scale", 1.0),
+        getParam<double>(ns+"/cam_xi"),
+        getParam<double>(ns+"/cam_fx"),
+        getParam<double>(ns+"/cam_fy"),
+        getParam<double>(ns+"/cam_cx"),
+        getParam<double>(ns+"/cam_cy"),
+        getParam<double>(ns+"/cam_d0", 0.0),
+        getParam<double>(ns+"/cam_d1", 0.0),
+        getParam<double>(ns+"/cam_d2", 0.0),
+        getParam<double>(ns+"/cam_d3", 0.0),
+        getParam<double>(ns+"/cam_d4", 0.0));
   }
   else if(cam_model == "Pinhole")
   {
@@ -104,8 +123,9 @@ bool loadFromRosNs(const std::string& ns, std::vector<vk::AbstractCamera*>& cam_
   for (int i = 0; i < cam_num; i ++)
   {
     std::string cam_ns = ns + "/cam_" + std::to_string(i);
-    std::string cam_model(getParam<std::string>(cam_ns+"/cam_model"));
-    if(cam_model == "FishPoly")
+    std::string cam_model_single(getParam<std::string>(cam_ns+"/cam_model"));
+    std::string distortion_model(getParam<std::string>(cam_ns+"/distortion_model", ""));
+    if(cam_model_single == "FishPoly")
     {
       cam_list.push_back(new vk::PolynomialCamera(
         getParam<int>(cam_ns+"/image_width"),
@@ -123,22 +143,39 @@ bool loadFromRosNs(const std::string& ns, std::vector<vk::AbstractCamera*>& cam_
         getParam<double>(cam_ns+"/k6", 0.0),
         getParam<double>(cam_ns+"/k7", 0.0)));
     }
-    else if(cam_model == "Pinhole")
+    else if(cam_model_single == "OmniRadtan" || (cam_model_single == "omni" && distortion_model == "radtan"))
+    {
+      cam_list.push_back(new vk::OmniRadtanCamera(
+          getParam<int>(cam_ns+"/cam_width"),
+          getParam<int>(cam_ns+"/cam_height"),
+          getParam<double>(cam_ns+"/scale", 1.0),
+          getParam<double>(cam_ns+"/cam_xi"),
+          getParam<double>(cam_ns+"/cam_fx"),
+          getParam<double>(cam_ns+"/cam_fy"),
+          getParam<double>(cam_ns+"/cam_cx"),
+          getParam<double>(cam_ns+"/cam_cy"),
+          getParam<double>(cam_ns+"/cam_d0", 0.0),
+          getParam<double>(cam_ns+"/cam_d1", 0.0),
+          getParam<double>(cam_ns+"/cam_d2", 0.0),
+          getParam<double>(cam_ns+"/cam_d3", 0.0),
+          getParam<double>(cam_ns+"/cam_d4", 0.0)));
+    }
+    else if(cam_model_single == "Pinhole")
     {
       cam_list.push_back(new vk::PinholeCamera(
-          getParam<int>(ns+"/cam_width"),
-          getParam<int>(ns+"/cam_height"),
-          getParam<double>(ns+"/scale", 1.0),
-          getParam<double>(ns+"/cam_fx"),
-          getParam<double>(ns+"/cam_fy"),
-          getParam<double>(ns+"/cam_cx"),
-          getParam<double>(ns+"/cam_cy"),
-          getParam<double>(ns+"/cam_d0", 0.0),
-          getParam<double>(ns+"/cam_d1", 0.0),
-          getParam<double>(ns+"/cam_d2", 0.0),
-          getParam<double>(ns+"/cam_d3", 0.0)));
+          getParam<int>(cam_ns+"/cam_width"),
+          getParam<int>(cam_ns+"/cam_height"),
+          getParam<double>(cam_ns+"/scale", 1.0),
+          getParam<double>(cam_ns+"/cam_fx"),
+          getParam<double>(cam_ns+"/cam_fy"),
+          getParam<double>(cam_ns+"/cam_cx"),
+          getParam<double>(cam_ns+"/cam_cy"),
+          getParam<double>(cam_ns+"/cam_d0", 0.0),
+          getParam<double>(cam_ns+"/cam_d1", 0.0),
+          getParam<double>(cam_ns+"/cam_d2", 0.0),
+          getParam<double>(cam_ns+"/cam_d3", 0.0)));
     }
-    else 
+    else
     {
       // cam_list.clear();
       res = false;

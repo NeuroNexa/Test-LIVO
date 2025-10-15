@@ -57,6 +57,7 @@ ENDIF()
 # Set Sourcefiles
 LIST(APPEND SOURCEFILES src/atan_camera.cpp
                         src/omni_camera.cpp
+                        src/omni_radtan_camera.cpp
                         src/math_utils.cpp
                         src/vision.cpp
                         src/performance_monitor.cpp

@@ -94,20 +94,25 @@ void VIOManager::initializeVIO() {
     }
     length = grid_n_width * grid_n_height;
 
+    pinhole_cam = dynamic_cast<vk::PinholeCamera *>(cams[0]);
     if (colmap_output_en) {
-        pinhole_cam = dynamic_cast<vk::PinholeCamera *>(cams[0]);
-        fout_colmap.open(DEBUG_FILE_DIR("Colmap/sparse/0/images.txt"), ios::out);
-        fout_colmap << "# Image list with two lines of data per image:\n";
-        fout_colmap << "#   IMAGE_ID, QW, QX, QY, QZ, TX, TY, TZ, CAMERA_ID, NAME\n";
-        fout_colmap << "#   POINTS2D[] as (X, Y, POINT3D_ID)\n";
-        fout_camera.open(DEBUG_FILE_DIR("Colmap/sparse/0/cameras.txt"), ios::out);
-        fout_camera << "# Camera list with one line of data per camera:\n";
-        fout_camera << "#   CAMERA_ID, MODEL, WIDTH, HEIGHT, PARAMS[]\n";
-        fout_camera << "1 PINHOLE " << width << " " << height << " "
-                    << std::fixed << std::setprecision(6)  // 控制浮点数精度为10位
-                    << cams[0]->fx() << " " << cams[0]->fy() << " "
-                    << cams[0]->cx() << " " << cams[0]->cy() << std::endl;
-        fout_camera.close();
+        if (pinhole_cam == nullptr) {
+            ROS_WARN("[initializeVIO()] COLMAP export requires a pinhole camera. Disabling export.");
+            colmap_output_en = false;
+        } else {
+            fout_colmap.open(DEBUG_FILE_DIR("Colmap/sparse/0/images.txt"), ios::out);
+            fout_colmap << "# Image list with two lines of data per image:\n";
+            fout_colmap << "#   IMAGE_ID, QW, QX, QY, QZ, TX, TY, TZ, CAMERA_ID, NAME\n";
+            fout_colmap << "#   POINTS2D[] as (X, Y, POINT3D_ID)\n";
+            fout_camera.open(DEBUG_FILE_DIR("Colmap/sparse/0/cameras.txt"), ios::out);
+            fout_camera << "# Camera list with one line of data per camera:\n";
+            fout_camera << "#   CAMERA_ID, MODEL, WIDTH, HEIGHT, PARAMS[]\n";
+            fout_camera << "1 PINHOLE " << width << " " << height << " "
+                        << std::fixed << std::setprecision(6)
+                        << pinhole_cam->fx() << " " << pinhole_cam->fy() << " "
+                        << pinhole_cam->cx() << " " << pinhole_cam->cy() << std::endl;
+            fout_camera.close();
+        }
     }
     grid_num.resize(length);
     map_index.resize(length);
@@ -157,22 +162,7 @@ void VIOManager::resetGrid() {
 
 void VIOManager::computeProjectionJacobian(int cam_idx, V3D p, MD(2, 3) &J)
 {
-    double fx_i = cams[cam_idx]->fx();
-    double fy_i = cams[cam_idx]->fy();
-
-    // 取出三维点 p = (x, y, z) (相机坐标系下)
-    const double x = p[0];
-    const double y = p[1];
-    const double z_inv = 1.0 / p[2];
-    const double z_inv_2 = z_inv * z_inv;
-
-    J(0, 0) = fx_i * z_inv;   // d(px)/d(x)
-    J(0, 1) = 0.0;            // d(px)/d(y)
-    J(0, 2) = -fx_i * x * z_inv_2;  // d(px)/d(z)
-
-    J(1, 0) = 0.0;
-    J(1, 1) = fy_i * z_inv;
-    J(1, 2) = -fy_i * y * z_inv_2;
+    cams[cam_idx]->projectionJacobian(p, J);
 }
 
 
@@ -2124,10 +2114,14 @@ void VIOManager::dumpDataForColmap() {
     // 获取 cam0 的图像
     cv::Mat img_rgb_cam0 = imgs_rgb[0];
 
+    if (pinhole_cam == nullptr) {
+        ROS_WARN("[dumpDataForColmap] COLMAP export is only supported for pinhole cameras.");
+        return;
+    }
+
     // 去畸变图像
     cv::Mat img_rgb_undistort_cam0;
-
-    dynamic_cast<vk::PinholeCamera*>(cams[cam0_idx])->undistortImage(img_rgb_cam0, img_rgb_undistort_cam0);
+    pinhole_cam->undistortImage(img_rgb_cam0, img_rgb_undistort_cam0);
 
     // 保存去畸变后的图像
     cv::imwrite(image_path, img_rgb_undistort_cam0);
