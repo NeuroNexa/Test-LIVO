@@ -164,16 +164,18 @@ void LIVMapper::readParameters(ros::NodeHandle &nh) {
         ROS_WARN("No multi-camera extrinsics found under extrin_calib/cameras; falling back to single-camera parameters.");
     }
 
-    auto camera_namespaces = discoverCameraNamespaces(nh);
-    if (!camera_namespaces.empty()) {
+    camera_param_names = discoverCameraNamespaces(nh);
+    if (!camera_param_names.empty()) {
         if (num_of_cameras == 0) {
-            num_of_cameras = static_cast<int>(camera_namespaces.size());
+            num_of_cameras = static_cast<int>(camera_param_names.size());
             ROS_INFO("Discovered %d camera parameter block(s) under namespace %s.",
                      num_of_cameras, nh.getNamespace().c_str());
-        } else if (num_of_cameras != static_cast<int>(camera_namespaces.size())) {
-            ROS_WARN("extrin_calib/cameras count (%d) mismatches number of cam_* parameter blocks (%zu). Using the minimum to avoid out-of-range access.",
-                     num_of_cameras, camera_namespaces.size());
-            num_of_cameras = std::min<int>(num_of_cameras, camera_namespaces.size());
+        } else if (num_of_cameras != static_cast<int>(camera_param_names.size())) {
+            ROS_WARN(
+                    "extrin_calib/cameras count (%d) mismatches number of cam parameter blocks (%zu). Using the minimum to avoid out-of-range access.",
+                    num_of_cameras, camera_param_names.size());
+            num_of_cameras = std::min<int>(num_of_cameras, camera_param_names.size());
+            camera_param_names.resize(static_cast<size_t>(num_of_cameras));
         }
         ensureExtrinsicsForCameraCount(static_cast<size_t>(num_of_cameras));
     } else {
@@ -182,16 +184,22 @@ void LIVMapper::readParameters(ros::NodeHandle &nh) {
             ROS_WARN("No cam_* parameter blocks found; defaulting to a single camera with identity extrinsics.");
         }
         ensureExtrinsicsForCameraCount(static_cast<size_t>(num_of_cameras));
+        camera_param_names.clear();
+        camera_param_names.reserve(static_cast<size_t>(num_of_cameras));
+        for (int i = 0; i < num_of_cameras; ++i) {
+            camera_param_names.push_back("cam_" + std::to_string(i));
+        }
     }
 }
 
-bool loadMultipleCameras(int cams_num, const std::string& ns, std::vector<vk::AbstractCamera*>& cam_list)
+bool loadMultipleCameras(const std::vector<std::string>& cam_param_names,
+                         const std::string& ns,
+                         std::vector<vk::AbstractCamera*>& cam_list)
 {
-
     bool all_ok = true;
-    for (int i = 0; i < cams_num; i++)
+    for (size_t i = 0; i < cam_param_names.size(); i++)
     {
-        std::string cam_ns = ns + "/cam_" + std::to_string(i);
+        std::string cam_ns = ns + "/" + cam_param_names[i];
         vk::AbstractCamera* cam = nullptr;
         // 调用 vikit 内部的 loadFromRosNs()，该函数读取 cam_ns 下的相机参数
         if (!vk::camera_loader::loadFromRosNs(cam_ns, cam))
@@ -202,7 +210,7 @@ bool loadMultipleCameras(int cams_num, const std::string& ns, std::vector<vk::Ab
         else
         {
             cam_list.push_back(cam);
-            ROS_INFO("Loaded camera %d from namespace: %s", i, cam_ns.c_str());
+            ROS_INFO("Loaded camera %zu from namespace: %s", i, cam_ns.c_str());
         }
     }
     return all_ok;
@@ -216,7 +224,19 @@ void LIVMapper::initializeComponents() {
     voxelmap_manager->extR_ << MAT_FROM_ARRAY(extrinR);
 
     // 所有相机内参加载到 vector<vk::AbstractCamera*> cams_ 中
-    if (!loadMultipleCameras(num_of_cameras,"laserMapping", vio_manager->cams))
+    std::vector<std::string> cam_params = camera_param_names;
+    if (cam_params.size() != static_cast<size_t>(num_of_cameras)) {
+        ROS_WARN("Camera namespace list has size %zu but num_of_cameras is %d. Adjusting to match.",
+                 cam_params.size(), num_of_cameras);
+        cam_params.resize(static_cast<size_t>(num_of_cameras));
+    }
+    for (size_t i = 0; i < cam_params.size(); ++i) {
+        if (cam_params[i].empty()) {
+            cam_params[i] = "cam_" + std::to_string(i);
+        }
+    }
+
+    if (!loadMultipleCameras(cam_params,"laserMapping", vio_manager->cams))
         throw std::runtime_error("Failed to load camera models from 'laserMapping' namespace.");
     else
         ROS_INFO("Loaded %zu camera(s) successfully.", vio_manager->cams.size());
@@ -896,11 +916,14 @@ cv::Mat LIVMapper::getImageFromMsg(const sensor_msgs::ImageConstPtr &img_msg) {
 std::vector<std::string> LIVMapper::discoverCameraNamespaces(const ros::NodeHandle &nh) const {
     std::vector<std::string> camera_names;
     for (int idx = 0;; ++idx) {
-        std::string cam_ns = "cam_" + std::to_string(idx);
-        if (!nh.hasParam(cam_ns)) {
+        const std::string cam_with_underscore = "cam_" + std::to_string(idx);
+        const std::string cam_without_underscore = "cam" + std::to_string(idx);
+        const bool has_with = nh.hasParam(cam_with_underscore);
+        const bool has_without = nh.hasParam(cam_without_underscore);
+        if (!has_with && !has_without) {
             break;
         }
-        camera_names.push_back(cam_ns);
+        camera_names.push_back(has_with ? cam_with_underscore : cam_without_underscore);
     }
     return camera_names;
 }

@@ -101,6 +101,8 @@ public:
 
     void ensureExtrinsicsForCameraCount(size_t count);
 
+    std::vector<std::string> camera_param_names;
+
     std::mutex mtx_buffer, mtx_buffer_imu_prop;
     std::condition_variable sig_buffer;
 
