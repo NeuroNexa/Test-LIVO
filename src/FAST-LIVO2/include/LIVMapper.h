@@ -97,6 +97,10 @@ public:
 
     cv::Mat getImageFromMsg(const sensor_msgs::ImageConstPtr &img_msg);
 
+    std::vector<std::string> discoverCameraNamespaces(const ros::NodeHandle &nh) const;
+
+    void ensureExtrinsicsForCameraCount(size_t count);
+
     std::mutex mtx_buffer, mtx_buffer_imu_prop;
     std::condition_variable sig_buffer;
 

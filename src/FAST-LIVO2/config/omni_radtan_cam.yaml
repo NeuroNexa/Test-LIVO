@@ -1,3 +1,5 @@
+# Duplicate the cam_* block for each OmniRadtan camera you want to enable.
+# Ensure that extrin_calib/cameras in the main YAML contains matching extrinsics.
 cam_0:
   cam_model: "OmniRadtan"
   distortion_model: "radtan"

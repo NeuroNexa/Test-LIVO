@@ -1,4 +1,5 @@
 #include "LIVMapper.h"
+#include <algorithm>
 
 LIVMapper::LIVMapper(ros::NodeHandle &nh)
         : extT(0, 0, 0),
@@ -162,6 +163,26 @@ void LIVMapper::readParameters(ros::NodeHandle &nh) {
     } else {
         ROS_WARN("No multi-camera extrinsics found under extrin_calib/cameras; falling back to single-camera parameters.");
     }
+
+    auto camera_namespaces = discoverCameraNamespaces(nh);
+    if (!camera_namespaces.empty()) {
+        if (num_of_cameras == 0) {
+            num_of_cameras = static_cast<int>(camera_namespaces.size());
+            ROS_INFO("Discovered %d camera parameter block(s) under namespace %s.",
+                     num_of_cameras, nh.getNamespace().c_str());
+        } else if (num_of_cameras != static_cast<int>(camera_namespaces.size())) {
+            ROS_WARN("extrin_calib/cameras count (%d) mismatches number of cam_* parameter blocks (%zu). Using the minimum to avoid out-of-range access.",
+                     num_of_cameras, camera_namespaces.size());
+            num_of_cameras = std::min<int>(num_of_cameras, camera_namespaces.size());
+        }
+        ensureExtrinsicsForCameraCount(static_cast<size_t>(num_of_cameras));
+    } else {
+        if (num_of_cameras == 0) {
+            num_of_cameras = 1;
+            ROS_WARN("No cam_* parameter blocks found; defaulting to a single camera with identity extrinsics.");
+        }
+        ensureExtrinsicsForCameraCount(static_cast<size_t>(num_of_cameras));
+    }
 }
 
 bool loadMultipleCameras(int cams_num, const std::string& ns, std::vector<vk::AbstractCamera*>& cam_list)
@@ -269,6 +290,10 @@ void LIVMapper::initializeSubscribersAndPublishers(ros::NodeHandle &nh, image_tr
     sub_img_list.clear();
     if (!camera_img_topics.empty()) {
         for (int i = 0; i < camera_img_topics.size(); i++) {
+            if (camera_img_topics[i].empty()) {
+                ROS_WARN("Camera %d has no image topic configured; skipping subscription.", i);
+                continue;
+            }
             // 使用 lambda 表达式绑定 cam_id 和其他相关参数
             auto img_cb = [i, this](const sensor_msgs::ImageConstPtr& msg) {
                 img_cbk(msg, i);  // 调用img_cbk，传递 cam_id
@@ -866,6 +891,51 @@ cv::Mat LIVMapper::getImageFromMsg(const sensor_msgs::ImageConstPtr &img_msg) {
     cv::Mat img;
     img = cv_bridge::toCvCopy(img_msg, "bgr8")->image;
     return img;
+}
+
+std::vector<std::string> LIVMapper::discoverCameraNamespaces(const ros::NodeHandle &nh) const {
+    std::vector<std::string> camera_names;
+    for (int idx = 0;; ++idx) {
+        std::string cam_ns = "cam_" + std::to_string(idx);
+        if (!nh.hasParam(cam_ns)) {
+            break;
+        }
+        camera_names.push_back(cam_ns);
+    }
+    return camera_names;
+}
+
+void LIVMapper::ensureExtrinsicsForCameraCount(size_t count) {
+    static const std::vector<double> identity_R = {1.0, 0.0, 0.0,
+                                                   0.0, 1.0, 0.0,
+                                                   0.0, 0.0, 1.0};
+    static const std::vector<double> zero_T = {0.0, 0.0, 0.0};
+
+    if (camera_extrin_Rs.size() < count) {
+        camera_extrin_Rs.resize(count, identity_R);
+    } else {
+        camera_extrin_Rs.resize(count);
+    }
+    for (auto &R : camera_extrin_Rs) {
+        if (R.size() != identity_R.size()) {
+            R = identity_R;
+        }
+    }
+
+    if (camera_extrin_Ts.size() < count) {
+        camera_extrin_Ts.resize(count, zero_T);
+    } else {
+        camera_extrin_Ts.resize(count);
+    }
+    for (auto &T : camera_extrin_Ts) {
+        if (T.size() != zero_T.size()) {
+            T = zero_T;
+        }
+    }
+
+    if (camera_img_topics.size() != count) {
+        camera_img_topics.resize(count);
+    }
 }
 
 // static int i = 0;
