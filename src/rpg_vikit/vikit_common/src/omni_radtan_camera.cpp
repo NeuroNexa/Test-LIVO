@@ -165,7 +165,8 @@ void OmniRadtanCamera::projectionJacobian(const Eigen::Vector3d &xyz_c,
   const double radial = 1.0 + k1_ * r2 + k2_ * r2 * r2 + k3_ * r2 * r2 * r2;
   const double radial_derivative = k1_ + 2.0 * k2_ * r2 + 3.0 * k3_ * r2 * r2;
 
-  const double dxd_dx = radial + 2.0 * x * x * radial_derivative + 6.0 * p2_ * x;
+  const double dxd_dx = radial + 2.0 * x * x * radial_derivative + 2.0 * p1_ * y +
+                        6.0 * p2_ * x;
   const double dxd_dy = 2.0 * x * y * radial_derivative + 2.0 * p1_ * x + 2.0 * p2_ * y;
   const double dyd_dx = 2.0 * x * y * radial_derivative + 2.0 * p1_ * x + 2.0 * p2_ * y;
   const double dyd_dy = radial + 2.0 * y * y * radial_derivative + 6.0 * p1_ * y + 2.0 * p2_ * x;
